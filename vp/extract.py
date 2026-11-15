@@ -75,12 +75,18 @@ def probe(path: str) -> dict:
     }
 
 
-def _frames(path: str) -> np.ndarray:
+def _frames(path: str) -> tuple[np.ndarray, float]:
+    """Every decoded frame, tiny and grey, with the stream frame rate."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=avg_frame_rate", "-of", "csv=p=0", path],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    num, den = (out.split("/") + ["1"])[:2]
+    rate = float(num) / float(den or 1) if float(den or 1) else 30.0
     raw = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path, "-vf", f"fps={FPS},scale={W}:{H}",
-         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        ["ffmpeg", "-v", "error", "-i", path, "-vf", f"scale={W}:{H}", "-fps_mode", "passthrough",
+         "-f", "rawvideo", "-pix_fmt", "gray", "-"],
         capture_output=True, check=True).stdout
-    return np.frombuffer(raw, np.uint8).reshape(-1, H, W, 3).astype(np.float32)
+    return np.frombuffer(raw, np.uint8).reshape(-1, H, W).astype(np.float32), rate
 
 
 def _audio_db(path: str, window: float = 0.5) -> tuple[list[float], list[float]]:
@@ -115,56 +121,66 @@ def _transcribe(path: str) -> list[dict]:
 def extract(path: str, transcribe: bool = True) -> Signals:
     _need("ffmpeg")
     meta = probe(path)
-    fr = _frames(path)
-    gray = fr.mean(axis=3)
-    n = len(gray)
-    times = [round(i / FPS, 2) for i in range(n)]
-    motion = [0.0] + [float(np.abs(gray[i] - gray[i - 1]).mean()) for i in range(1, n)]
-    bright = [float(g.mean()) for g in gray]
-    contrast = [float(g.std()) for g in gray]
-
-    # Cuts: motion spikes. Adjacent spike frames are one transition.
-    cut_idx: list[int] = []
-    for i, m in enumerate(motion):
-        if m >= CUT_MOTION and (not cut_idx or i - cut_idx[-1] > 1):
-            cut_idx.append(i)
-
-    # Flashes: a frame much brighter and flatter than its neighbours
-    # (fade-through-white). They read as "the video glitched" and cost viewers.
-    flashes = []
-    for i in range(1, n - 1):
-        nb = (bright[i - 1] + bright[i + 1]) / 2
-        returns = bright[i] - bright[i + 1] > 30  # a flash comes back down; a cut to a bright card does not
-        if returns and bright[i] - nb > 40 and contrast[i] < 0.75 * min(contrast[i - 1], contrast[i + 1]):
-            flashes.append(times[i])
-
-    # Shots between cuts; motion inside a shot excludes the cut frames themselves.
-    bounds = [0] + cut_idx + [n]
-    shots: list[Shot] = []
-    for a, b in zip(bounds[:-1], bounds[1:]):
-        if b - a < 1:
-            continue
-        inner = [motion[j] for j in range(a + 1, b) if motion[j] < CUT_MOTION] or [0.0]
-        shots.append(Shot(start=round(a / FPS, 2), end=round(min(b / FPS, meta["duration"]), 2),
-                          motion=round(float(np.median(inner)), 1),
-                          brightness=round(float(np.mean(bright[a:b])), 1)))
-    # merge micro-shots (flash frames) into the following shot
-    merged: list[Shot] = []
-    for s in shots:
-        if merged and s.duration < 0.3:
-            merged[-1].end = s.end
-        else:
-            merged.append(s)
-
+    dense, rate = _frames(path)
+    sig = analyse_frames([i / rate for i in range(len(dense))], dense, meta["duration"])
     at, adb = _audio_db(path) if meta["has_audio"] else ([], [])
     return Signals(
         path=str(Path(path)), duration=round(meta["duration"], 2), width=meta["width"],
-        height=meta["height"], has_audio=meta["has_audio"], times=times,
-        motion=[round(m, 1) for m in motion], brightness=[round(b, 1) for b in bright],
-        contrast=[round(c, 1) for c in contrast], cuts=[times[i] for i in cut_idx],
-        flashes=flashes, shots=merged, audio_times=at, audio_db=adb,
-        transcript=_transcribe(path) if transcribe else [],
+        height=meta["height"], has_audio=meta["has_audio"], audio_times=at, audio_db=adb,
+        transcript=_transcribe(path) if transcribe else [], **sig,
     )
+
+
+def analyse_frames(t: list[float], g: np.ndarray, duration: float) -> dict:
+    """Cuts, flashes and shots from every frame; motion on a 0.2 s grid.
+
+    The browser page (reel-check) runs the same steps in JavaScript; keep them in sync.
+    """
+    n = len(g)
+    lum = g.reshape(n, -1).mean(1)
+    std = g.reshape(n, -1).std(1)
+    d1 = np.zeros(n)
+    d1[1:] = np.abs(g[1:] - g[:-1]).reshape(n - 1, -1).mean(1)
+
+    cuts: list[float] = []
+    flashes: list[float] = []
+    for i in range(1, n):
+        if d1[i] < CUT_MOTION or (cuts and t[i] - cuts[-1] < 0.3):
+            continue
+        cuts.append(round(t[i], 2))
+        # Flash: jumps to a bright, flat frame and fades back down within 0.6 s.
+        if lum[i] - lum[i - 1] > 40 and std[i] < 0.75 * std[i - 1]:
+            j = i + 1
+            while j < n and t[j] - t[i] <= 0.6:
+                if lum[j] < lum[i] - 30:
+                    flashes.append(round(t[i], 2))
+                    break
+                j += 1
+
+    # 0.2 s grid of motion (nearest decoded frame to each grid time).
+    times = [round(k / FPS, 2) for k in range(int(round(duration * FPS)))]
+    idx = np.searchsorted(np.array(t), np.array(times) - 1e-6).clip(0, n - 1)
+    motion = [0.0] + [float(np.abs(g[idx[k]] - g[idx[k - 1]]).mean()) for k in range(1, len(times))]
+
+    def clean(k: int) -> bool:  # grid step k doesn't straddle a cut or a flash fade
+        a, b = times[k - 1], times[k]
+        return not any(a < c <= b + 1e-6 for c in cuts) and not any(f <= a < f + 0.5 for f in flashes)
+
+    bounds = [0.0] + cuts + [duration]
+    shots: list[Shot] = []
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        inner = [motion[k] for k in range(1, len(times)) if a <= times[k - 1] and times[k] <= b + 1e-6 and clean(k)]
+        lum_in = [lum[i] for i in range(n) if a <= t[i] < b] or [0.0]
+        shot = Shot(start=round(a, 2), end=round(b, 2), motion=round(float(np.median(inner)) if inner else 0.0, 1),
+                    brightness=round(float(np.mean(lum_in)), 1))
+        if shots and shot.duration < 0.3:
+            shots[-1].end = shot.end
+        else:
+            shots.append(shot)
+    return {"times": times, "motion": [round(m, 1) for m in motion],
+            "brightness": [round(float(lum[i]), 1) for i in idx],
+            "contrast": [round(float(std[i]), 1) for i in idx],
+            "cuts": cuts, "flashes": flashes, "shots": shots}
 
 
 def keyframes(path: str, out_dir: str, hook_fps: float = 4, rest_fps: float = 1,

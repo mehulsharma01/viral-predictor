@@ -1,0 +1,419 @@
+<title>Reel Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one working column. Upload → verdict → hook strip → retention → reasons → Claude → reel log. */
+:root{
+  --bg:#FFFFFF; --panel:#F4F7F1; --ink:#131A12; --mut:#5A6556; --line:#DCE4D6;
+  --green:#A3E635; --green-ink:#3C6410; --amber:#FFC24D; --high:#C2410C; --med:#B7791F; --low:#6B7468;
+  --band-high:rgba(194,65,12,.13); --band-med:rgba(255,194,77,.25);
+  --font:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E120D; --panel:#171D15; --ink:#EEF3EA; --mut:#9AA693; --line:#2A3326;
+  --green:#A3E635; --green-ink:#B9EE6A; --amber:#FFC24D; --high:#FF7A45; --med:#FFC24D; --low:#8E998A;
+  --band-high:rgba(255,122,69,.16); --band-med:rgba(255,194,77,.16); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E120D; --panel:#171D15; --ink:#EEF3EA; --mut:#9AA693; --line:#2A3326;
+  --green:#A3E635; --green-ink:#B9EE6A; --amber:#FFC24D; --high:#FF7A45; --med:#FFC24D; --low:#8E998A;
+  --band-high:rgba(255,122,69,.16); --band-med:rgba(255,194,77,.16); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--font)}
+.wrap{max-width:920px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+.wrap>*,#result>div>*{min-width:0}
+h1{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-size:19px;font-weight:700;margin:0 0 10px;text-wrap:balance}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--green-ink)}
+.mut{color:var(--mut)} .small{font-size:13px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header p{margin:6px 0 0;max-width:62ch}
+.drop{display:grid;gap:10px;background:var(--panel);border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--green-ink)}
+.drop strong{font-size:17px}
+.btn{font:600 15px var(--font);border:0;border-radius:999px;padding:11px 20px;cursor:pointer;background:var(--ink);color:var(--bg)}
+.btn.green{background:var(--green);color:#131A12}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,.drop:focus-visible,input:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.preview{margin-top:12px}.preview video{height:180px;border-radius:10px;display:block}
+.progress{height:6px;background:var(--line);border-radius:6px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--green);transition:width .15s}
+.verdict{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;background:var(--panel);border-radius:16px;padding:18px}
+.dial{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;font:800 30px var(--font);background:conic-gradient(var(--c,var(--green)) calc(var(--p)*1%),var(--line) 0)}
+.dial span{width:72px;height:72px;border-radius:50%;background:var(--panel);display:grid;place-items:center}
+.verdict h2{font-size:22px;margin:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile b{display:block;font-size:24px;font-weight:800}
+.tile span{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.strip figure{margin:0;flex:0 0 auto}
+.strip canvas{height:150px;width:auto;border-radius:8px;display:block}
+.strip figcaption{font:12px var(--mono);color:var(--mut);text-align:center}
+svg{width:100%;height:auto;display:block}
+.chart text{font:11px var(--mono);fill:var(--mut)}
+.reasons{display:grid;gap:10px}
+.reason{display:grid;grid-template-columns:86px 1fr;gap:12px;border-top:1px solid var(--line);padding-top:10px}
+.reason .when{font:600 13px var(--mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font:700 11px var(--font);letter-spacing:.05em;text-transform:uppercase;border-radius:6px;padding:2px 7px;color:#fff;margin-bottom:4px}
+.pill.s3{background:var(--high)} .pill.s2{background:var(--med);color:#131A12} .pill.s1{background:var(--low)}
+.reason p{margin:2px 0}
+.fix{color:var(--green-ink);font-weight:600}
+.src{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.card{border:1px solid var(--line);border-radius:14px;padding:16px}
+dl{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;margin:0}
+dt{font-weight:700} dd{margin:0;min-width:0}
+ol{margin:6px 0 0;padding-left:20px}
+.note{background:var(--amber);color:#3a2a00;border-radius:10px;padding:10px 14px;font-weight:500}
+.log{display:grid;gap:10px}
+.logrow{display:grid;grid-template-columns:1fr auto;gap:8px 14px;border-top:1px solid var(--line);padding-top:10px}
+.logrow .meta{min-width:0}
+.cmp{font:13px var(--mono)}
+form.actual{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;background:var(--panel);padding:12px;border-radius:10px}
+form.actual label{display:grid;gap:3px;font-size:12px;color:var(--mut)}
+form.actual input{font:14px var(--mono);padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+.acc{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.acc .tile b.good{color:var(--green-ink)}
+@media (max-width:520px){.reason{grid-template-columns:1fr}.verdict{grid-template-columns:1fr}dl{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.progress i{transition:none}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Glimsera Studio · test page</div>
+  <h1>Reel Check</h1>
+  <p class="mut">Pick a reel before you post it. The page measures cuts, movement, flashes, the end card and sound, then Claude watches the frames. Every reason has a timestamp you can check against your Insights graph later.</p>
+</header>
+
+<section>
+  <label class="drop" id="drop" tabindex="0" for="file">
+    <strong>Choose a reel</strong>
+    <span class="mut small">MP4 or MOV from your phone or computer. The video stays in your browser; only still frames go to Claude when you ask.</span>
+  </label>
+  <input id="file" type="file" accept="video/*" hidden>
+  <div id="preview" class="preview" hidden></div>
+  <div id="status" class="small mut" style="margin-top:10px" hidden></div>
+  <div class="progress" id="prog" hidden><i></i></div>
+</section>
+
+<section id="result" hidden></section>
+
+<section>
+  <h2>Reel log</h2>
+  <p class="mut small" style="margin:0 0 10px">Save each checked reel. After posting, add the real numbers from Insights. Accuracy below only counts reels checked before posting.</p>
+  <div class="acc" id="acc"></div>
+  <div class="log" id="log"><p class="mut small">Loading the log…</p></div>
+</section>
+</div>
+
+<script>
+/* ---------- measurement: same constants and rules as viral-predictor/vp ---------- */
+const FPS=5, W=72, H=128, CUT=40, ACTIVE=7, MINRUN=3, STATIC=3;
+const PRIORS={base_hazard:.09,early_boost:1.6,early_tau:1.5,no_action_mult:1.9,flash_mult:3.0,static_tail_mult:2.2,quiet_audio_mult:1.25};
+const $=s=>document.querySelector(s);
+const r1=x=>Math.round(x*10)/10, r2=x=>Math.round(x*100)/100;
+const median=a=>{const s=[...a].sort((x,y)=>x-y),n=s.length;return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2};
+const clamp=x=>Math.max(0,Math.min(1,x));
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let current=null; // {name, sig, rep, sheets, hookFrames}
+
+function setStatus(msg,p){const s=$("#status"),pr=$("#prog");s.hidden=!msg;s.textContent=msg||"";pr.hidden=p==null;if(p!=null)pr.firstElementChild.style.width=(p*100)+"%"}
+
+function seek(v,t){return new Promise((res,rej)=>{const on=()=>{v.removeEventListener("seeked",on);res()};v.addEventListener("seeked",on);v.currentTime=t;setTimeout(()=>rej(new Error("seek timeout")),8000)})}
+
+/* Read every frame (cuts and flashes last only a few frames), tiny and grey. */
+async function measure(file){
+  const url=URL.createObjectURL(file);
+  const box=$("#preview");box.innerHTML="";box.hidden=false;
+  const v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";v.src=url;v.setAttribute("aria-label","Reel being measured");
+  box.append(v);
+  await new Promise((res,rej)=>{v.onloadeddata=res;v.onerror=()=>rej(new Error("This browser can't open that video. Try an MP4 (H.264) or a different browser."))});
+  const dur=v.duration;
+  const small=document.createElement("canvas");small.width=W;small.height=H;const sx=small.getContext("2d",{willReadFrequently:true});
+  const T=[],G=[],hookFrames=[],restFrames=[];
+  const keyT=[];for(let i=0;i<12;i++)keyT.push(r2(i/4));for(let t=3;t<dur-0.05;t+=1)keyT.push(r2(t));keyT.push(r2(Math.max(dur-0.1,0)));
+  let ki=0;
+  const grab=t=>{const c=document.createElement("canvas");const h=320,w=Math.round(h*v.videoWidth/v.videoHeight);c.width=w;c.height=h;c.getContext("2d").drawImage(v,0,0,w,h);c.dataset.t=t;return c};
+  const take=t=>{
+    if(T.length&&t<=T[T.length-1]+1e-4)return;
+    sx.drawImage(v,0,0,W,H);const d=sx.getImageData(0,0,W,H).data;const g=new Float32Array(W*H);
+    for(let p=0,q=0;p<d.length;p+=4,q++)g[q]=(d[p]+d[p+1]+d[p+2])/3;
+    T.push(t);G.push(g);
+    while(ki<keyT.length&&keyT[ki]<=t+0.02){(keyT[ki]<3?hookFrames:restFrames).push(grab(keyT[ki]));ki++}
+    setStatus("Watching the reel…",0.05+0.8*Math.min(1,t/dur));
+  };
+  if("requestVideoFrameCallback" in HTMLVideoElement.prototype){
+    await new Promise((res,rej)=>{
+      const cb=(now,meta)=>{take(meta.mediaTime);if(!v.ended)v.requestVideoFrameCallback(cb)};
+      v.requestVideoFrameCallback(cb);v.onended=res;
+      setTimeout(res,(dur/1.5+15)*1000);
+      v.playbackRate=1.5;v.play().catch(rej);
+    });
+    v.pause();
+  }else{
+    for(let t=0;t<dur;t+=1/15){await seek(v,t);take(t)}
+  }
+  URL.revokeObjectURL(url);box.hidden=true;box.innerHTML="";
+  setStatus("Measuring the sound…",0.9);
+  let audioT=[],audioDb=[],hasAudio=true;
+  try{
+    const buf=await file.arrayBuffer();const AC=window.AudioContext||window.webkitAudioContext;const ac=new AC();
+    const ab=await ac.decodeAudioData(buf);ac.close&&ac.close();
+    const sr=ab.sampleRate,len=ab.length,ch=ab.numberOfChannels,win=Math.floor(sr*0.5);
+    const data=[...Array(ch).keys()].map(c=>ab.getChannelData(c));
+    for(let i=0;i+win<=len;i+=win){let s=0;for(let k=i;k<i+win;k++){let x=0;for(const d of data)x+=d[k];x/=ch;s+=x*x}
+      audioT.push(r2(i/sr));audioDb.push(r1(20*Math.log10(Math.sqrt(s/win)+1e-9)))}
+  }catch(e){hasAudio=false}
+  current_sig={duration:r2(dur),...analyseFrames(T,G,dur),audio_db:audioDb,audio_t:audioT,has_audio:hasAudio,frames_read:T.length};
+  return {hookFrames,restFrames};
+}
+
+/* Same steps as analyse_frames() in viral-predictor/vp/extract.py. */
+function analyseFrames(t,g,duration){
+  const n=g.length,N=W*H,lum=[],std=[],d1=[0];
+  for(let i=0;i<n;i++){let s=0;for(const x of g[i])s+=x;const m=s/N;let v=0;for(const x of g[i])v+=(x-m)**2;lum.push(m);std.push(Math.sqrt(v/N));
+    if(i){let d=0;for(let q=0;q<N;q++)d+=Math.abs(g[i][q]-g[i-1][q]);d1.push(d/N)}}
+  const cuts=[],flashes=[];
+  for(let i=1;i<n;i++){
+    if(d1[i]<CUT||(cuts.length&&t[i]-cuts[cuts.length-1]<0.3))continue;
+    cuts.push(r2(t[i]));
+    if(lum[i]-lum[i-1]>40&&std[i]<0.75*std[i-1]){for(let j=i+1;j<n&&t[j]-t[i]<=0.6;j++)if(lum[j]<lum[i]-30){flashes.push(r2(t[i]));break}}
+  }
+  const times=[...Array(Math.round(duration*FPS)).keys()].map(k=>r2(k/FPS));
+  const idx=times.map(x=>{let lo=0,hi=n-1;while(lo<hi){const m=(lo+hi)>>1;if(t[m]<x-1e-6)lo=m+1;else hi=m}return lo});
+  const motion=[0];for(let k=1;k<times.length;k++){let d=0;const A=g[idx[k]],B=g[idx[k-1]];for(let q=0;q<N;q++)d+=Math.abs(A[q]-B[q]);motion.push(d/N)}
+  const clean=k=>{const a=times[k-1],b=times[k];return !cuts.some(c=>a<c&&c<=b+1e-6)&&!flashes.some(f=>f<=a&&a<f+0.5)};
+  const bounds=[0,...cuts,duration],shots=[];
+  for(let s=0;s<bounds.length-1;s++){const a=bounds[s],b=bounds[s+1];const inner=[];
+    for(let k=1;k<times.length;k++)if(a<=times[k-1]&&times[k]<=b+1e-6&&clean(k))inner.push(motion[k]);
+    const shot={start:r2(a),end:r2(b),motion:r1(inner.length?median(inner):0)};
+    if(shots.length&&shot.end-shot.start<0.3)shots[shots.length-1].end=shot.end;else shots.push(shot)}
+  return {cuts,flashes,shots};
+}
+
+let current_sig=null;
+const dur_=s=>r2(s.end-s.start);
+
+function actionStart(sig){let st=null,len=0;for(const s of sig.shots){if(s.motion>=ACTIVE){if(st==null){st=s.start;len=0}len+=dur_(s);if(len>=MINRUN)return st}else{st=null;len=0}}return null}
+function staticTail(sig){const l=sig.shots[sig.shots.length-1];return l&&l.motion<STATIC&&dur_(l)>=2?[l.start,sig.duration]:null}
+function quietStart(sig){const a=sig.audio_db;if(a.length<4)return false;const rest=a.slice(2).sort((x,y)=>x-y);return a[0]<rest[Math.floor(rest.length/2)]-6}
+
+function findings(sig){
+  const f=[],act=actionStart(sig),hook=sig.shots.filter(s=>act==null||s.end<=act+0.01);
+  if(act==null)f.push({start:0,end:sig.duration,severity:3,title:"Nothing sustained happens on screen",evidence:"No stretch of 3+ seconds with real movement was found.",fix:"Show the product or result being used, starting in the first second."});
+  else if(act>1)f.push({start:0,end:act,severity:act>=2.5?3:2,title:`The demo starts at ${act.toFixed(1)}s. Before that, little moves.`,evidence:`First sustained movement at ${act.toFixed(1)}s. Shots before it: `+hook.map(s=>`${s.start.toFixed(1)}-${s.end.toFixed(1)}s (motion ${s.motion})`).join(", ")+".",fix:`Open on the moment at ${act.toFixed(1)}s. Put the hook text over the action, not over still faces.`});
+  if(act&&hook.length>=2&&hook.every(s=>s.motion<ACTIVE||dur_(s)<1.5)){const ds=hook.map(dur_);f.push({start:0,end:act,severity:2,title:`Hook is a montage of ${hook.length} short, mostly still shots`,evidence:`${hook.length} shots in ${act.toFixed(1)}s, each ${Math.min(...ds).toFixed(1)}-${Math.max(...ds).toFixed(1)}s long.`,fix:"Use one shot that shows the promise happening. A still face is a promise; the action is the proof."})}
+  if(sig.flashes.length)f.push({start:sig.flashes[0],end:r2(sig.flashes[sig.flashes.length-1]+0.4),severity:sig.flashes.some(t=>t<5)?3:1,title:`${sig.flashes.length} fade-to-white transition${sig.flashes.length>1?"s":""}`,evidence:"Washed-out frames at "+sig.flashes.map(t=>t.toFixed(1)+"s").join(", ")+".",fix:"Use hard cuts. A white flash looks like the video is loading or broken."});
+  const tail=staticTail(sig);if(tail){const L=tail[1]-tail[0],sh=L/sig.duration;f.push({start:tail[0],end:tail[1],severity:sh>0.2?3:2,title:`${L.toFixed(1)}s static end card (${Math.round(sh*100)}% of the video)`,evidence:`Last shot from ${tail[0].toFixed(1)}s has almost no movement (motion ${sig.shots[sig.shots.length-1].motion}).`,fix:"Cut the end card to 1-1.5s, or move the call to action into the middle as a text overlay."})}
+  if(quietStart(sig)){const rest=sig.audio_db.slice(2).sort((x,y)=>x-y);f.push({start:0,end:0.5,severity:1,title:"Sound starts quiet",evidence:`First 0.5s is ${sig.audio_db[0]} dB vs about ${rest[Math.floor(rest.length/2)]} dB for the rest.`,fix:"Start the audio at full level; no fade-in."})}
+  if(!sig.has_audio)f.push({start:0,end:sig.duration,severity:2,title:"No sound could be read",evidence:"The browser found no audio track.",fix:"Add a voiceover or a trending sound."});
+  if(sig.duration>35&&(act||0)>2)f.push({start:0,end:sig.duration,severity:1,title:`Long for a hook that starts late (${Math.round(sig.duration)}s)`,evidence:"Long reels need a strong first second.",fix:"Trim to the essential steps."});
+  return f.map(x=>({...x,source:"measured"}));
+}
+
+function curve(sig,p=PRIORS){
+  const act=actionStart(sig),tail=staticTail(sig),qs=quietStart(sig);let s=1,t=0;const out=[[0,1]];
+  while(t<sig.duration-1e-6){let h=p.base_hazard*(1+p.early_boost*Math.exp(-t/p.early_tau));
+    if(act==null||t<act)h*=p.no_action_mult;if(sig.flashes.some(fl=>t-fl>=0&&t-fl<0.4))h*=p.flash_mult;
+    if(tail&&t>=tail[0])h*=p.static_tail_mult;if(qs&&t<1)h*=p.quiet_audio_mult;
+    s*=Math.exp(-h*0.2);t=Math.round((t+0.2)*1000)/1000;out.push([t,s])}
+  return out;
+}
+const at=(c,t)=>{let b=c[0][1];for(const [ct,cs] of c)if(ct<=t+1e-6)b=cs;return b};
+
+function score(sig,f,ai){
+  const c=curve(sig),tail=staticTail(sig),contentEnd=tail?tail[0]:sig.duration;
+  const ret3=at(c,3),skip=1-ret3,retEnd=at(c,contentEnd);
+  let hook=clamp(((1-skip)-.15)/.55)*100;if(ai)hook=.6*hook+.4*ai.hook_score*10;
+  const hold=clamp((retEnd/Math.max(ret3,1e-6))/.6)*100;
+  const parts={hook:[hook,.45],hold:[hold,.2]};
+  if(ai){parts.value=[ai.value_score*10,.15];parts.share=[50*!!ai.share_trigger+30*!!ai.save_trigger+20*(ai.original_footage==="yes"),.2]}
+  let overall=Object.values(parts).reduce((a,[v,w])=>a+v*w,0)/Object.values(parts).reduce((a,[,w])=>a+w,0);
+  const notes=[];
+  if(ai&&ai.original_footage==="no"){overall=Math.min(overall,60);notes.push("Footage looks reposted from other creators. Instagram shows reused clips to fewer non-followers, so the score is capped at 60.")}
+  if(!ai)notes.push("Timing checks only so far. Hook text, share reason and originality need the Claude check.");
+  const highs=f.some(x=>x.severity===3);
+  const verdict=!ai&&overall>=70&&!highs?"Timing passes. Run the Claude check before posting.":overall>=70&&!highs?"Post it":overall>=50?"Fix the high-severity items first":"Re-edit before posting";
+  const scores={};for(const k in parts)scores[k]=Math.round(parts[k][0]);scores.overall=Math.round(overall);
+  return {curve:c,skip:r1(skip*100),ret1:r1(at(c,1)*100),ret3:r1(ret3*100),retEnd:r1(retEnd*100),scores,verdict,notes,actionStart:actionStart(sig)};
+}
+
+/* ---------- rendering ---------- */
+function chart(sig,rep,f){
+  const w=640,h=210,L=40,B=24,T=8,iw=w-L-10,ih=h-B-T,x=t=>L+iw*t/sig.duration,y=s=>T+ih*(1-s);
+  const bands=f.filter(z=>z.severity>=2).map(z=>`<rect x="${x(z.start).toFixed(1)}" y="${T}" width="${Math.max(x(Math.min(z.end,sig.duration))-x(z.start),2).toFixed(1)}" height="${ih}" fill="${z.severity===3?"var(--band-high)":"var(--band-med)"}"/>`).join("");
+  const grid=[0,.5,1].map(v=>`<line x1="${L}" x2="${w-10}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v*100}%</text>`).join("");
+  const step=sig.duration>40?10:sig.duration>20?5:3;let ticks="";for(let t=0;t<=sig.duration;t+=step)ticks+=`<text x="${x(t)}" y="${h-6}" text-anchor="middle">${t}s</text>`;
+  const pts=rep.curve.map(([t,s])=>`${x(t).toFixed(1)},${y(s).toFixed(1)}`).join(" ");
+  const area=`${x(0)},${y(0)} ${pts} ${x(sig.duration)},${y(0)}`;
+  const p3=at(rep.curve,3);
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Predicted share of viewers still watching over time">${bands}${grid}${ticks}<polygon points="${area}" fill="var(--green)" opacity=".18"/><polyline points="${pts}" fill="none" stroke="var(--green-ink)" stroke-width="2.5"/>${sig.duration>3?`<circle cx="${x(3)}" cy="${y(p3)}" r="4" fill="var(--green-ink)"/><text x="${x(3)+7}" y="${y(p3)-6}">${Math.round(p3*100)}% at 3s</text>`:""}</svg>`;
+}
+
+function render(){
+  const {name,sig,ai,aiState,hookFrames}=current;
+  const f=[...findings(sig),...(ai?ai.issues.map(i=>({...i,title:i.problem,evidence:"",source:"Claude"})):[])].sort((a,b)=>b.severity-a.severity||a.start-b.start);
+  const rep=score(sig,findings(sig),ai);current.rep=rep;current.findings=f;
+  const col=rep.scores.overall>=70?"var(--green)":rep.scores.overall>=50?"var(--amber)":"var(--high)";
+  const li=a=>(a||[]).map(x=>`<li>${esc(x)}</li>`).join("");
+  const aiBlock=ai?`<div class="card"><h2>What Claude saw</h2><dl>
+      <dt>First frame</dt><dd>${esc(ai.first_frame)}</dd>
+      <dt>Hook text</dt><dd>${esc(ai.hook_text||"none")}</dd>
+      <dt>Promise</dt><dd>${esc(ai.promise)} <span class="mut">(${ai.promise_shown_at!=null?"shown at "+ai.promise_shown_at+"s":"never shown, only written"})</span></dd>
+      <dt>Payoff</dt><dd>${esc(ai.payoff)} <span class="mut">${ai.payoff_at!=null?"at "+ai.payoff_at+"s":""}</span></dd>
+      <dt>Reason to share</dt><dd>${esc(ai.share_trigger||"none found")}</dd>
+      <dt>Reason to save</dt><dd>${esc(ai.save_trigger||"none found")}</dd>
+      <dt>Original footage</dt><dd>${esc(ai.original_footage)}: ${esc(ai.originality_evidence)}</dd></dl>
+      <h2 style="margin-top:16px">Better openings</h2><ol>${li(ai.better_hooks)}</ol>
+      <h2 style="margin-top:16px">Re-cut plan</h2><ol>${li(ai.recut_plan)}</ol></div>`
+    :`<div class="card"><h2>Claude check</h2><p class="mut small" style="margin:0 0 10px">Claude looks at the frames (4 per second for the first 3 seconds, then 1 per second) and answers a fixed checklist: hook text, whether the promise is shown, the payoff time, reasons to share or save, and originality. It runs on your Claude account.</p>
+      <div class="row"><button class="btn green" id="askAi" ${aiState==="running"||aiState==="off"?"disabled":""}>${aiState==="running"?"Claude is watching…":"Run the Claude check"}</button><span class="small mut" id="aiMsg">${esc(current.aiMsg||"")}</span></div>
+      <p class="small mut" id="aiLive" style="white-space:pre-wrap;max-height:120px;overflow:auto"></p></div>`;
+  $("#result").innerHTML=`
+    <div style="display:grid;gap:22px">
+    <div class="verdict"><div class="dial" style="--p:${rep.scores.overall};--c:${col}"><span>${rep.scores.overall}</span></div>
+      <div><div class="eyebrow">${esc(name)} · <span class="num">${sig.duration}s</span></div><h2>${esc(rep.verdict)}</h2>
+      <div class="small mut">Predicted skip rate <b class="num">${rep.skip}%</b> · still watching at 1s <span class="num">${rep.ret1}%</span>, at 3s <span class="num">${rep.ret3}%</span>, at end of content <span class="num">${rep.retEnd}%</span></div></div></div>
+    ${rep.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("")}
+    <div class="tiles">${Object.entries(rep.scores).map(([k,v])=>`<div class="tile"><span>${k}</span><b class="num">${v}</b></div>`).join("")}</div>
+    <div><h2>First 3 seconds</h2><div class="strip" id="strip"></div></div>
+    <div><h2>Predicted retention</h2><p class="small mut" style="margin:-4px 0 8px">Shaded: where the problems below sit. Compare with your real graph in Insights after posting.</p>${chart(sig,rep,f)}</div>
+    <div><h2>Why, with timestamps</h2><div class="reasons">${f.map(z=>`<div class="reason"><div class="when">${z.start.toFixed(1)}–${Math.min(z.end,sig.duration).toFixed(1)}s</div>
+      <div><span class="pill s${z.severity}">${["","Low","Medium","High"][z.severity]}</span> <span class="src">${esc(z.source)}</span><p><b>${esc(z.title)}</b></p>${z.evidence?`<p class="small mut">${esc(z.evidence)}</p>`:""}<p class="fix small">Fix: ${esc(z.fix)}</p></div></div>`).join("")||'<p class="mut">No timing problems found.</p>'}</div></div>
+    ${aiBlock}
+    <div class="row"><button class="btn" id="save" ${current.savedId?"disabled":""}>${current.savedId?"Saved to the reel log":"Save to the reel log"}</button><span class="small mut" id="saveMsg"></span></div>
+    </div>`;
+  $("#result").hidden=false;
+  const strip=$("#strip");hookFrames.forEach(c=>{const fig=document.createElement("figure");fig.append(c);const cap=document.createElement("figcaption");cap.textContent=Number(c.dataset.t).toFixed(2)+"s";fig.append(cap);strip.append(fig)});
+  const b=$("#askAi");if(b)b.onclick=runClaude;
+  $("#save").onclick=saveReel;
+}
+
+async function handle(file){
+  if(!file)return;
+  $("#result").hidden=true;setStatus("Opening the video…",0.05);
+  try{
+    const {hookFrames,restFrames}=await measure(file);
+    current={name:file.name.replace(/\.[^.]+$/,""),sig:current_sig,ai:null,aiState:sampleNs?"idle":"off",aiMsg:sampleNs?"":"Claude check isn't available in this view.",hookFrames,restFrames,savedId:null};
+    setStatus(null);render();$("#result").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+  }catch(e){setStatus(e.message||String(e))}
+}
+
+/* ---------- Claude check (sample capability, viewer's own account) ---------- */
+let sampleNs=null,db=null;
+function sheet(canvases,cols){
+  if(!canvases.length)return null;const fw=canvases[0].width,fh=canvases[0].height,rows=Math.ceil(canvases.length/cols);
+  const c=document.createElement("canvas");c.width=cols*fw;c.height=rows*(fh+28);const x=c.getContext("2d");x.fillStyle="#000";x.fillRect(0,0,c.width,c.height);
+  canvases.forEach((f,i)=>{const cx=(i%cols)*fw,cy=Math.floor(i/cols)*(fh+28);x.drawImage(f,cx,cy+28);x.fillStyle="#A3E635";x.font="bold 22px sans-serif";x.fillText("t="+Number(f.dataset.t).toFixed(2)+"s",cx+8,cy+22)});
+  return new Promise(r=>c.toBlob(r,"image/jpeg",0.82));
+}
+const CHECKLIST=`Reply with only one JSON object with exactly these keys:
+{"first_frame": string (what is literally visible at 0.0s),
+ "hook_text": string (on-screen text in the first 3s, verbatim, "" if none),
+ "promise": string (what the viewer is promised),
+ "promise_shown_at": number|null (first second the promise is SHOWN happening, not just written),
+ "payoff_at": number|null, "payoff": string,
+ "movement_in_first_second": boolean (an action, not a cut),
+ "curiosity_gap": boolean, "text_readable_in_1s": boolean,
+ "share_trigger": string|null (why someone would send it to a friend), "save_trigger": string|null,
+ "cta_text": string|null, "cta_at": number|null,
+ "original_footage": "yes"|"no"|"unclear" ("no" if creator credits, watermarks or other creators' clips are visible),
+ "originality_evidence": string,
+ "hook_score": integer 0-10, "value_score": integer 0-10,
+ "issues": [{"start": number, "end": number, "severity": 1|2|3, "problem": string (what a scrolling viewer experiences), "fix": string (concrete edit)}] (max 6, time order, only real ones),
+ "better_hooks": [3 strings, each a first frame + text, under 20 words],
+ "recut_plan": [ordered edit steps using this footage only]}`;
+async function runClaude(){
+  if(!sampleNs||!current)return;current.aiState="running";current.aiMsg="";render();
+  try{
+    const lim=await sampleNs.limits().catch(()=>null);
+    if(!lim||!lim.images){current.aiState="off";current.aiMsg="This view can't send images to Claude.";render();return}
+    const max=lim.images.maxCount||2;
+    const imgs=[await sheet(current.hookFrames,6)];
+    const rest=current.restFrames;const per=Math.max(1,Math.ceil(rest.length/Math.max(1,max-1)));
+    for(let i=0;i<rest.length&&imgs.length<max;i+=Math.max(per,12))imgs.push(await sheet(rest.slice(i,i+Math.max(per,12)),6));
+    const s=current.sig;
+    const timeline={duration:s.duration,cuts:s.cuts,flashes:s.flashes,shots:s.shots,action_start:actionStart(s),static_tail:staticTail(s),quiet_start:quietStart(s)};
+    const prompt=`You are a short-form video editor who has studied thousands of Instagram Reels retention graphs. Judge this reel the way a scrolling viewer does: thumb ready to swipe, deciding in under 1.5 seconds. Be concrete and literal; every claim must point at a timestamp printed on the frames. Do not praise.
+The images are contact sheets of one vertical reel, read left to right, top to bottom. Each frame is labeled with its time. Image 1: the first 3 seconds at 4 frames per second. Later images: the rest at 1 frame per second.
+Measured timeline from code (trust these numbers for cuts, motion and timing):
+${JSON.stringify(timeline)}
+Account: Glimsera, a Dubai-based beauty and wellness review platform.
+${CHECKLIST}`;
+    const live=()=>document.getElementById("aiLive");
+    const j=await sampleNs.json(prompt,{images:imgs,modelTier:"complex",onText:({text})=>{const el=live();if(el)el.textContent=text.slice(-400)}});
+    if(!j||!Array.isArray(j.issues))throw {message:"Claude's answer was missing the checklist."};
+    j.issues=j.issues.filter(i=>typeof i.start==="number").map(i=>({...i,severity:Math.min(3,Math.max(1,Math.round(i.severity||1)))}));
+    current.ai=j;current.aiState="done";current.savedId=null;render();
+  }catch(e){current.aiState=e&&e.code==="not_granted"?"off":"idle";current.aiMsg=e&&e.code==="not_granted"?"Claude check was not allowed for this page.":e&&e.code==="rate_limited"?"Claude usage limit reached. Try again later.":"Claude check failed: "+(e.message||e.code||e);render()}
+}
+
+/* ---------- reel log (db capability) ---------- */
+async function saveReel(){
+  const msg=$("#saveMsg");if(!db){msg.textContent="The reel log isn't available in this view.";return}
+  const {name,sig,rep,findings:f,ai}=current;
+  try{
+    const ref=await db.collection("reels").add({name,createdAt:new Date().toISOString(),duration:sig.duration,
+      predictedSkip:rep.skip,ret3:rep.ret3,scores:rep.scores,verdict:rep.verdict,actionStart:rep.actionStart,
+      findings:f.map(({start,end,severity,title,fix,source})=>({start,end,severity,title,fix,source})),
+      ai:ai?{hook_score:ai.hook_score,value_score:ai.value_score,original_footage:ai.original_footage,share_trigger:ai.share_trigger,save_trigger:ai.save_trigger,hook_text:ai.hook_text}:null,
+      checkedBeforePosting:true,actual:null});
+    current.savedId=ref.id;render();$("#saveMsg").textContent="Saved. Add the real numbers once it has been up 48 hours.";
+  }catch(e){msg.textContent="Couldn't save: "+(e.message||e.code||e)}
+}
+
+function accuracy(rows){
+  const done=rows.filter(r=>r.actual&&typeof r.actual.skipRate==="number"&&r.checkedBeforePosting!==false);
+  const out={n:done.length};
+  if(done.length){out.within=Math.round(done.filter(r=>Math.abs(r.predictedSkip-r.actual.skipRate)<=10).length/done.length*100)}
+  const pairs=[];for(let i=0;i<done.length;i++)for(let k=i+1;k<done.length;k++){const a=done[i],b=done[k];if(Math.abs(a.actual.skipRate-b.actual.skipRate)>=5)pairs.push((a.predictedSkip-b.predictedSkip)*(a.actual.skipRate-b.actual.skipRate)>0)}
+  if(pairs.length){out.order=Math.round(pairs.filter(Boolean).length/pairs.length*100);out.pairs=pairs.length}
+  const hits=done.filter(r=>typeof r.actual.dropStart==="number").map(r=>(r.findings||[]).some(f=>f.severity>=2&&f.start<r.actual.dropEnd&&f.end>r.actual.dropStart));
+  if(hits.length){out.reason=Math.round(hits.filter(Boolean).length/hits.length*100);out.hitsN=hits.length}
+  return out;
+}
+function renderLog(docs){
+  const rows=docs.map(d=>({id:d.id,...d.data()}));
+  const a=accuracy(rows),T=80;
+  const tile=(label,v,sub)=>`<div class="tile"><span>${label}</span><b class="num ${v!=null&&v>=T?"good":""}">${v==null?"–":v+"%"}</b><div class="small mut">${sub}</div></div>`;
+  $("#acc").innerHTML=tile("Skip rate within 10 pts",a.within,`${a.n} reel${a.n===1?"":"s"} with real numbers`)+tile("Reason matched the real drop",a.reason,a.hitsN?`${a.hitsN} reels with a drop marked`:"mark where the graph drops")+tile("Picked the better reel",a.order,a.pairs?`${a.pairs} pairs compared`:"needs 2+ reels")+`<div class="tile"><span>Target</span><b class="num">${T}%</b><div class="small mut">on reels checked before posting</div></div>`;
+  $("#log").innerHTML=rows.length?rows.map(r=>`<div class="logrow" data-id="${esc(r.id)}"><div class="meta"><b>${esc(r.name)}</b> <span class="small mut num">${esc((r.createdAt||"").slice(0,10))} · ${r.duration}s · overall ${r.scores?.overall??"–"}</span>
+      ${r.checkedBeforePosting===false?'<div class="small mut">Logged after posting (used to set the starting rules, not counted in accuracy)</div>':""}
+      <div class="cmp">predicted skip ${r.predictedSkip}%${r.actual?` · real ${r.actual.skipRate}%${typeof r.actual.dropStart==="number"?` · real drop ${r.actual.dropStart}-${r.actual.dropEnd}s`:""}${r.actual.views!=null?` · ${r.actual.views} views`:""}`:" · real: not added yet"}</div></div>
+      <div><button class="btn ghost small" data-act="${esc(r.id)}">${r.actual?"Edit real numbers":"Add real numbers"}</button></div></div>`).join(""):'<p class="mut small">No reels saved yet. Check a reel above and save it here.</p>';
+  $("#log").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>openActual(rows.find(r=>r.id===b.dataset.act),b.closest(".logrow")));
+}
+function openActual(r,row){
+  if(row.querySelector("form"))return;const a=r.actual||{};
+  const f=document.createElement("form");f.className="actual";
+  const fld=(id,label,val,ph)=>`<label for="${id}-${r.id}">${label}<input id="${id}-${r.id}" name="${id}" inputmode="decimal" value="${val??""}" placeholder="${ph}"></label>`;
+  f.innerHTML=fld("skipRate","Skip rate %",a.skipRate,"77.6")+fld("drop","Biggest drop (s)",a.dropStart!=null?a.dropStart+"-"+a.dropEnd:"","0-2.5")+fld("views","Views",a.views,"1000")+fld("shares","Shares",a.shares,"0")+fld("saves","Saves",a.saves,"3")+fld("nonFollowers","Non-followers %",a.nonFollowers,"56.6")+`<div style="display:flex;align-items:end"><button class="btn green" type="submit">Save numbers</button></div>`;
+  f.onsubmit=async e=>{e.preventDefault();const v=Object.fromEntries(new FormData(f));const num=x=>x===""?null:Number(x);
+    const sk=num(v.skipRate);if(sk==null||isNaN(sk)){f.querySelector("input").focus();return}
+    const [ds,de]=(v.drop||"").split("-").map(x=>x.trim()===""?null:Number(x));
+    try{await db.doc("reels/"+r.id).update({actual:{skipRate:sk,dropStart:Number.isFinite(ds)?ds:null,dropEnd:Number.isFinite(de)?de:null,views:num(v.views),shares:num(v.shares),saves:num(v.saves),nonFollowers:num(v.nonFollowers)}})}
+    catch(err){f.insertAdjacentHTML("beforeend",`<p class="small" style="color:var(--high)">Couldn't save: ${esc(err.message||err.code||err)}</p>`)}};
+  row.append(f);f.querySelector("input").focus();
+}
+
+/* ---------- boot ---------- */
+const fileIn=$("#file"),drop=$("#drop");
+fileIn.onchange=()=>handle(fileIn.files[0]);
+drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fileIn.click()}};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};drop.ondragleave=()=>drop.classList.remove("over");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");handle(e.dataTransfer.files[0])};
+(async()=>{
+  const C=window.claude;
+  if(!C||!C.use){$("#log").innerHTML='<p class="mut small">The reel log works when this page is opened on claude.ai.</p>';return}
+  C.use("sample").then(s=>{sampleNs=s;if(current&&current.aiState==="off"&&s){current.aiState="idle";current.aiMsg="";render()}});
+  const timer=setTimeout(()=>{if(!db)$("#log").innerHTML='<p class="mut small">The reel log could not load. Reload the page to try again.</p>'},10000);
+  db=await C.use("db");
+  if(!db){clearTimeout(timer);$("#log").innerHTML='<p class="mut small">Sign in to claude.ai to keep a reel log.</p>';return}
+  db.collection("reels").orderBy("createdAt","desc").onSnapshot(s=>{clearTimeout(timer);renderLog(s.docs)},e=>{clearTimeout(timer);$("#log").innerHTML=`<p class="mut small">Couldn't read the reel log: ${esc(e.message||e.code)}</p>`});
+})();
+
+</script>

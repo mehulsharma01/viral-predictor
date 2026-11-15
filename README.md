@@ -59,3 +59,9 @@ that reel, so its near-perfect prediction **is not evidence**. Only reels logged
 
 The original text-only simulator (asks GPT 20 times "would you like this?") is in
 `legacy/text_simulator.py` (needs `openai scipy statsmodels`, no longer in requirements). It never looked at the video, so it could not see timing problems.
+
+## Browser version
+
+`web/reel-check.html` runs the same measurement in the browser (it reads every frame while the video plays)
+and asks Claude through the claude.ai artifact runtime, so no API key is needed there. Keep
+`analyseFrames()` in it in step with `analyse_frames()` in `vp/extract.py`.
