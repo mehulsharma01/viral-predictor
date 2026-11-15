@@ -106,11 +106,11 @@ def analyze(path: str, use_ai: bool = True, context: str = "", out_dir: str | No
     prior_skip = 1 - ret3
     skip = cal_skip if cal_skip is not None else prior_skip
 
-    hook = _clamp(((1 - skip) - 0.15) / 0.55) * 100
-    if ai:
-        hook = 0.6 * hook + 0.4 * ai["hook_score"] * 10
+    timing = _clamp(((1 - skip) - 0.15) / 0.55) * 100
     hold = _clamp((ret_end_content / max(ret3, 1e-6)) / 0.6) * 100
-    parts = {"hook": (hook, 0.45), "hold": (hold, 0.20)}
+    # Timing alone can't tell a strong hook from a boring one: the hook score comes mostly from Claude.
+    parts = ({"hook": (0.3 * timing + 0.7 * ai["hook_score"] * 10, 0.45), "hold": (hold, 0.20)} if ai
+             else {"timing": (timing, 0.65), "hold": (hold, 0.35)})
     if ai:
         parts["value"] = (ai["value_score"] * 10, 0.15)
         share = 50 * bool(ai["share_trigger"]) + 30 * bool(ai["save_trigger"]) + 20 * (ai["original_footage"] == "yes")
@@ -122,8 +122,8 @@ def analyze(path: str, use_ai: bool = True, context: str = "", out_dir: str | No
         notes.append("Footage looks reposted from other creators. Instagram shows reused clips to fewer non-followers, so the score is capped at 60.")
     highs = [f for f in report["findings"] if f["severity"] == 3]
     if not ai:
-        notes.append("Measured timing only. Hook text, share reason and originality were not checked; run with Claude before posting.")
-    verdict = ("Timing passes; run the Claude check before posting" if not ai and overall >= 70 and not highs else
+        notes.append("Only timing is checked (movement, flashes, end card, sound). A clean timing score does NOT mean the hook is strong; run with Claude to judge the hook.")
+    verdict = (("Timing problems: fix these first" if highs else "Timing is clean. Hook not checked yet") if not ai else
                "Post it" if overall >= 70 and not highs else
                "Fix the high-severity items first" if overall >= 50 else "Re-edit before posting")
 

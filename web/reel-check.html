@@ -228,16 +228,17 @@ const at=(c,t)=>{let b=c[0][1];for(const [ct,cs] of c)if(ct<=t+1e-6)b=cs;return 
 function score(sig,f,ai){
   const c=curve(sig),tail=staticTail(sig),contentEnd=tail?tail[0]:sig.duration;
   const ret3=at(c,3),skip=1-ret3,retEnd=at(c,contentEnd);
-  let hook=clamp(((1-skip)-.15)/.55)*100;if(ai)hook=.6*hook+.4*ai.hook_score*10;
+  const timing=clamp(((1-skip)-.15)/.55)*100;
   const hold=clamp((retEnd/Math.max(ret3,1e-6))/.6)*100;
-  const parts={hook:[hook,.45],hold:[hold,.2]};
+  // Timing alone can't tell a strong hook from a boring one: the hook score comes mostly from Claude.
+  const parts=ai?{hook:[.3*timing+.7*ai.hook_score*10,.45],hold:[hold,.2]}:{timing:[timing,.65],hold:[hold,.35]};
   if(ai){parts.value=[ai.value_score*10,.15];parts.share=[50*!!ai.share_trigger+30*!!ai.save_trigger+20*(ai.original_footage==="yes"),.2]}
   let overall=Object.values(parts).reduce((a,[v,w])=>a+v*w,0)/Object.values(parts).reduce((a,[,w])=>a+w,0);
   const notes=[];
   if(ai&&ai.original_footage==="no"){overall=Math.min(overall,60);notes.push("Footage looks reposted from other creators. Instagram shows reused clips to fewer non-followers, so the score is capped at 60.")}
-  if(!ai)notes.push("Timing checks only so far. Hook text, share reason and originality need the Claude check.");
+  if(!ai)notes.push("Only timing is checked so far (movement, flashes, end card, sound). A clean timing score does NOT mean the hook is strong. Run the Claude check to judge the hook itself.");
   const highs=f.some(x=>x.severity===3);
-  const verdict=!ai&&overall>=70&&!highs?"Timing passes. Run the Claude check before posting.":overall>=70&&!highs?"Post it":overall>=50?"Fix the high-severity items first":"Re-edit before posting";
+  const verdict=!ai?(highs?"Timing problems: fix these first":"Timing is clean. Hook not checked yet"):overall>=70&&!highs?"Post it":overall>=50?"Fix the high-severity items first":"Re-edit before posting";
   const scores={};for(const k in parts)scores[k]=Math.round(parts[k][0]);scores.overall=Math.round(overall);
   return {curve:c,skip:r1(skip*100),ret1:r1(at(c,1)*100),ret3:r1(ret3*100),retEnd:r1(retEnd*100),scores,verdict,notes,actionStart:actionStart(sig)};
 }
@@ -277,7 +278,7 @@ function render(){
     <div style="display:grid;gap:22px">
     <div class="verdict"><div class="dial" style="--p:${rep.scores.overall};--c:${col}"><span>${rep.scores.overall}</span></div>
       <div><div class="eyebrow">${esc(name)} · <span class="num">${sig.duration}s</span></div><h2>${esc(rep.verdict)}</h2>
-      <div class="small mut">Predicted skip rate <b class="num">${rep.skip}%</b> · still watching at 1s <span class="num">${rep.ret1}%</span>, at 3s <span class="num">${rep.ret3}%</span>, at end of content <span class="num">${rep.retEnd}%</span></div></div></div>
+      <div class="small mut">Predicted skip rate${current.ai?"":" (from timing only)"} <b class="num">${rep.skip}%</b> · still watching at 1s <span class="num">${rep.ret1}%</span>, at 3s <span class="num">${rep.ret3}%</span>, at end of content <span class="num">${rep.retEnd}%</span></div></div></div>
     ${rep.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("")}
     <div class="tiles">${Object.entries(rep.scores).map(([k,v])=>`<div class="tile"><span>${k}</span><b class="num">${v}</b></div>`).join("")}</div>
     <div><h2>First 3 seconds</h2><div class="strip" id="strip"></div></div>
