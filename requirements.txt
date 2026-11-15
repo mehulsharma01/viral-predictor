@@ -1,7 +1,6 @@
+anthropic>=2.8
+numpy
+pydantic>=2
 streamlit
-openai
-scipy
-statsmodels
-numpy<2.0.0
-pandas
-pyarrow<15.0.0
+# optional: timed transcript
+# faster-whisper

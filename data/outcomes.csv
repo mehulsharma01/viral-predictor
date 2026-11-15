@@ -1,0 +1,2 @@
+name,logged_on,skip_rate,views,likes,comments,shares,saves,reposts,non_followers_pct,drop_start,drop_end,predicted_skip,predicted_overall,finding_ranges,action_start,early_flashes,hook_shots,static_tail_share,quiet_start,duration,ai_hook_score,ai_movement_1s,ai_curiosity_gap,ai_share_trigger,ai_original
+grey_eyeshadow,2026-11-15,77.6,1000,7,0,0,3,2,56.6,0,2.5,77.2,32,0-3.8;1.2-2.8;13.0-18.43;0-3.8,3.8,2,3,0.295,1,18.43,-1,-1,-1,-1,-1
